@@ -16,10 +16,18 @@ Currently testing on Cloudant as eventually when it is run it will run on IBM Cl
 
 ## Planned features
 
+### Under the covers
+* ~~ Screen scrape the website into JSON ~~ **[done]**
+* ~~ Store the JSON in a database that is persistent (and not duplicated) between runs ~~ **[done]**
+* Create a cronjob style schedule to crawl once per day
+
+### User Interface
+
+* Simple watch brand based navigation - list of brands and then drill down to each series and model - using images where possible.
 * For each brand, see which watches are increasing and decreasing in value
 * For each watch type, see the price history over time for each model type and aggregated for the overall model
 * For each model type, see the price history over time
 * Biggest gainers and looser brands
-* Search by series name (e.g. "Submariner") or reference (e.g. "14060M") to get stats on a particular 
+* Search by series name (e.g. "Submariner") or reference (e.g. "14060M") to get stats on a particular watch type
 
 Written by Simon Greig.
