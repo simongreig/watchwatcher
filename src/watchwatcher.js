@@ -3,9 +3,30 @@
 var request = require('request');
 var cheerio = require('cheerio');
 var debug = require('debug')('watchwatcher');
+var schedule = require('node-schedule');
+var express = require('express');
+var cfenv = require('cfenv');
+var helmet = require('helmet');
+
 
 var RateLimiter = require('limiter').RateLimiter;
 var dbLimiter = new RateLimiter(1, 150);
+
+
+// Run the crawl at 06:00 every morning.
+var shed = schedule.scheduleJob('0 6 * * *', function(){
+  console.log('Wakey wakey.  Schedule time!');
+  watchTheWatches();
+});
+
+var app = express();
+app.use (helmet());
+
+
+// serve the files out of ./public as our main files
+app.use(express.static(__dirname + '/../public'));
+
+
 
 
 var db = require ('./watchwatcher-db');
@@ -16,7 +37,7 @@ const baseURL = "http://www.watchfinder.co.uk"
 function addToList (list, page, db, testMode, callback) {
 
   console.log ("Requesting page " + page + " ...")
-  request('http://www.watchfinder.co.uk/all-watches?&orderby=PriceHighToLow&pageno='+page, function (error, response, html) {
+  request(baseURL + '/all-watches?&orderby=PriceHighToLow&pageno='+page, function (error, response, html) {
 
     if (response.statusCode != 200) {
       callback(list);
@@ -172,16 +193,46 @@ function watchTheWatches (testMode) {
 }
 
 
- watchTheWatches(true);
+ //watchTheWatches(true);
 
-
+/*
 db.getCount ("brand", function(err, body){
   if (!err) {
     body.rows.forEach(function(doc) {
       console.log(doc);
     });
   }
+});*/
+
+
+
+//******************************************************************************
+//
+// This route kicks off a manual crawl.
+//
+// Returns: The output string
+//
+//******************************************************************************
+app.get('/crawl', function (req, res) {
+  watchTheWatches();
+  res.send("Crawl Started");
 });
+
+
+
+
+
+
+
+// get the app environment from Cloud Foundry
+var appEnv = cfenv.getAppEnv();
+
+// start server on the specified port and binding host
+app.listen(appEnv.port, '0.0.0.0', function() {
+  // print a message when the server starts listening
+  console.log("Watch Watcher starting on " + appEnv.url);
+});
+
 
 
 

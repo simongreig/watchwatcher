@@ -9,7 +9,7 @@ var debug = require('debug')('watchwatcher-db');
 
 // Sort out the database connections and names.
 var cloudant = initDBConnection();
-var dbName = "watchwatcher-test";
+var dbName = "watchwatcher";
 if (process.env.NODE_ENV != "production") {
   dbName = dbName + "-" + process.env.NODE_ENV;
 }
