@@ -5,6 +5,11 @@
 var Cloudant = require('cloudant');
 var debug = require('debug')('watchwatcher-db');
 
+var RateLimiter = require('limiter').RateLimiter;
+var dbWriteLimiter = new RateLimiter(1, 150);
+var dbReadLimiter = new RateLimiter(1, 100);
+
+
 
 
 // Sort out the database connections and names.
@@ -51,6 +56,73 @@ function initDBConnection() {
 
 //******************************************************************************
 //
+// Simple database lookup with a key
+//
+//******************************************************************************
+var get = function (key, callback) {
+  debug ("get entered:", key);
+
+  dbReadLimiter.removeTokens(1, function(err, remainingRequests) {
+    db.get(key, function(err, data) {
+      if (!data) {
+        debug ("get ERROR returned:", err);
+        callback(err);
+      } else {
+        debug ("get", data);
+        if (data.value) {
+          debug ("get returned:", data.value);
+          callback (data.value);
+        }
+      }
+    });
+  });
+
+
+
+};
+exports.get = get;
+
+
+
+//******************************************************************************
+//
+// Sets a simple key in the database
+//
+//******************************************************************************
+var set = function (key, value, callback) {
+  dbReadLimiter.removeTokens(1, function(err, remainingRequests) {
+
+    db.get(key, function(err, data) {
+
+      var updateData = {};
+      if (data) {
+        // Row exists so do an update.
+        updateData._id = data._id;
+        updateData._rev = data._rev;
+
+        updateData.value = {};
+        updateData.value = value;
+      } else {
+        // No row exists
+        updateData._id = key;
+        updateData.value = {};
+        updateData.value = value;
+      }
+
+      dbWriteLimiter.removeTokens(1, function(err, remainingRequests) {
+        dbAdd(updateData, callback);
+      });
+
+
+    });
+  });
+
+};
+exports.set = set;
+
+
+//******************************************************************************
+//
 // Add a key object to the database.
 //
 //******************************************************************************
@@ -93,17 +165,41 @@ var addKeyObj = function (obj, callback) {
 
     updateData.obj.timestamp = new Date();
 
-    db.insert(updateData, function(err, data) {
-      debug ("addKeyObj INSERT:", err, data);
-      if (err) {
-        callback (err);
-      } else {
-        callback (data);
-      }
+
+    dbWriteLimiter.removeTokens(1, function(err, remainingRequests) {
+      dbAdd(updateData, callback);
     });
+
+
   });
 };
 exports.addKeyObj = addKeyObj;
+
+//******************************************************************************
+//
+// Add to the database.  Separate function to support the rate limiting.
+//
+//******************************************************************************
+function dbAdd (updateData, callback) {
+      debug ("dbAdd entered:", updateData);
+      db.insert(updateData, function(err, data) {
+        debug ("dbAdd INSERT:", err, data);
+        if (err) {
+          if (callback) {
+            callback (err);
+          }
+          else {
+            debug (err);
+          }
+
+        } else {
+          if (callback) {
+            callback (data);
+          }
+
+        }
+      });
+}
 
 //******************************************************************************
 //
@@ -153,30 +249,6 @@ var getWithID = function (id, callback) {
   });
 };
 exports.getWithID = getWithID;
-
-//******************************************************************************
-//
-// Get details about an object without decrypting the contents.
-//
-//******************************************************************************
-var getRaw = function (id, callback) {
-  debug ("getRaw entered:", id);
-  db.get(id, function(err, data) {
-    if (!data) {
-      debug ("getRaw ERROR returned:", err);
-      callback(err);
-    } else {
-      debug ("getRaw", data);
-      if (data.keyObj) {
-        var keyObj = data.keyObj;
-        keyObj.key = keyObj.key;
-        debug ("getRaw returned:", data.keyObj);
-        callback (data.keyObj);
-      }
-    }
-  });
-};
-exports.getRaw = getRaw;
 
 //******************************************************************************
 //

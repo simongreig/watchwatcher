@@ -9,9 +9,6 @@ var cfenv = require('cfenv');
 var helmet = require('helmet');
 
 
-var RateLimiter = require('limiter').RateLimiter;
-var dbLimiter = new RateLimiter(1, 150);
-
 
 // Run the crawl at 06:00 every morning.
 var shed = schedule.scheduleJob('0 6 * * *', function(){
@@ -145,9 +142,18 @@ function addToList (list, page, db, testMode, callback) {
 
 
         // *** INSERT INTO THE DATABASE ****
+        item.key = String(item.productID);
+        debug ("Adding " + item.productID + " at " + new Date ());
+        db.addKeyObj (item, function(dbData){
+          debug ("add:", dbData);
+        });
+
+
+        /*
         dbLimiter.removeTokens(1, function(err, remainingRequests) {
           dbAdd(item);
         });
+        */
 
 
         list.push (item);
@@ -175,35 +181,17 @@ function addToList (list, page, db, testMode, callback) {
 };
 
 function printList (list) {
-  console.log (list.length + " watches watched!");
+  var results = "Crawl completed:" + new Date() + " " + list.length + " watches watched!";
+  console.log (results);
+  db.set ("status", results);
 }
 
-function dbAdd (item) {
-  item.key = String(item.productID);
-  debug ("Adding " + item.productID + " at " + new Date ());
-  db.addKeyObj (item, function(dbData){
-    debug ("add:", dbData);
-  });
-}
 
 function watchTheWatches (testMode) {
   // Start the main loop.
   var watchList = [];
   addToList (watchList, 1, db, testMode, printList);
 }
-
-
- //watchTheWatches(true);
-
-/*
-db.getCount ("brand", function(err, body){
-  if (!err) {
-    body.rows.forEach(function(doc) {
-      console.log(doc);
-    });
-  }
-});*/
-
 
 
 //******************************************************************************
@@ -218,8 +206,19 @@ app.get('/crawl', function (req, res) {
   res.send("Crawl Started");
 });
 
+//******************************************************************************
+//
+// This route does a simple status check
+//
+// Returns: The status string
+//
+//******************************************************************************
+app.get('/status', function (req, res) {
+  db.get("status", function(data) {
+    res.send(data);
+  });
 
-
+});
 
 
 
@@ -232,13 +231,3 @@ app.listen(appEnv.port, '0.0.0.0', function() {
   // print a message when the server starts listening
   console.log("Watch Watcher starting on " + appEnv.url);
 });
-
-
-
-
-/*
-db.searchSeries ("16710", function(data){
-  for (var i = 0; i < data.length; i++) {
-    console.log('  Doc id: %s, %s', data[i].obj.productID, data[i].obj.lastPrice.price);
-  }
-});*/
