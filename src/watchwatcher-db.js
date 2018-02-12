@@ -6,8 +6,9 @@ var Cloudant = require('cloudant');
 var debug = require('debug')('watchwatcher-db');
 
 var RateLimiter = require('limiter').RateLimiter;
-var dbWriteLimiter = new RateLimiter(1, 150);
+var dbWriteLimiter = new RateLimiter(1, 500);
 var dbReadLimiter = new RateLimiter(1, 100);
+var dbQueryLimiter = new RateLimiter(1, 300);
 
 
 
@@ -373,9 +374,38 @@ exports.getCountWithKey = getCountWithKey;
 //
 //******************************************************************************
 var getSeriesImg = function (brand, series, callback) {
+
   debug ("getSeriesImg: brand:%s, series:%s", brand, series);
-  db.find({selector:{'obj.brand': brand, 'obj.series': series},'fields': ['obj.img'], 'limit': 1}, function(err, result) {
-    callback (result);
+
+/*
+  {
+     "selector": {
+        "obj.brand": "Rolex",
+        "obj.series": "Air-King"
+     },
+     "fields": [
+        "obj.img"
+     ],
+     "limit": 1
+  }
+*/
+
+  dbQueryLimiter.removeTokens(1, function(err, remainingRequests) {
+
+    db.find({selector: {'obj.brand': brand, 'obj.series': series},'fields': ['obj.img'], 'limit': 1}, function(err, result) {
+      var key = [];
+      debug ("getSeriesImg find result.  err:%s, result:%s", JSON.stringify(err), JSON.stringify(result));
+      if (!result) {
+          debug("****CALLBACK 1");
+          callback (brand, series, "no img");
+      } else {
+          debug("****CALLBACK 2");
+          callback (brand, series, result.docs[0].obj.img);
+
+      }
+    });
   });
+
+
 }
 exports.getSeriesImg = getSeriesImg;

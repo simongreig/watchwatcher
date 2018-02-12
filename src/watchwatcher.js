@@ -8,6 +8,9 @@ var express = require('express');
 var cfenv = require('cfenv');
 var helmet = require('helmet');
 
+var RateLimiter = require('limiter').RateLimiter;
+var listLimiter = new RateLimiter(1, 1000);
+
 
 
 // Run the crawl at 06:00 every morning.
@@ -29,6 +32,13 @@ app.use(express.static(__dirname + '/../public'));
 var db = require ('./watchwatcher-db');
 
 const baseURL = "http://www.watchfinder.co.uk"
+
+function addToListWithLimiter (list, page, db, testMode, callback) {
+  listLimiter.removeTokens(1, function() {
+    debug ("addToListWithLimiter fired %s", new Date());
+    addToList (list, page, db, testMode, callback);
+  });
+}
 
 
 function addToList (list, page, db, testMode, callback) {
@@ -150,13 +160,6 @@ function addToList (list, page, db, testMode, callback) {
         });
 
 
-        /*
-        dbLimiter.removeTokens(1, function(err, remainingRequests) {
-          dbAdd(item);
-        });
-        */
-
-
         list.push (item);
 
         if (testMode) {
@@ -170,7 +173,7 @@ function addToList (list, page, db, testMode, callback) {
       if (stuffReturned) {
         console.log ("Page " + page + " had content");
         if (!testMode) {
-          addToList (list, ++page, db, testMode, printList);
+          addToListWithLimiter (list, ++page, db, testMode, printList);
         }
       } else {
         console.log ("No more content on page " + page + "! Stopping.");
@@ -190,10 +193,27 @@ function printList (list) {
 
 function watchTheWatches (testMode) {
   // Start the main loop.
+  debug ("watchTheWatches testmode:%d", testMode);
   var watchList = [];
-  addToList (watchList, 1, db, testMode, printList);
+  addToListWithLimiter (watchList, 1, db, testMode, printList);
 }
 
+
+//******************************************************************************
+//
+// This route kicks off a manual crawl.
+//
+// Returns: The output string
+//
+//******************************************************************************
+app.get('/crawl/:test', function (req, res) {
+  if (req.params.test == "true"){
+    watchTheWatches(true);
+  } else {
+    watchTheWatches();
+  }
+  res.send("Crawl Started");
+});
 
 //******************************************************************************
 //
@@ -261,22 +281,68 @@ app.get('/brand/:brand', function (req, res) {
       resp = data.rows;
 
       debug(data);
+      var responses = 0;
       for (var i = 0; i < resp.length; i++) {
         debug ("Brand: %s, Series: %s", resp[i].key[0],resp[i].key[1]);
-//        db.getSeriesImg (resp[i].key[0], resp[i].key[1], function(resp,img) {
-//           resp[i].img = img;
-//        });
+        db.getSeriesImg (resp[i].key[0], resp[i].key[1], function(brand, series, img) {
+          debug("Before brand:%s, series:%s, img:%s", brand, series, img);
+          responses++;
+          var key = [];
+          key.push(brand);
+          key.push(series);
+          var picked = resp.find(o => isEquivalent(o.key, key));
+          debug(JSON.stringify(key) + "****   " + picked);
+          picked.img = img;
+
+          debug (responses + " " + resp.length);
+          if (responses >= resp.length) {
+            debug ("Responding " + JSON.stringify(resp));
+            res.send(resp);
+          }
+
+
+          debug ("After " + JSON.stringify(resp));
+        });
       }
+
 
 
 
     } else {
       resp = "{'error':'No brands returned'}";
     }
-    res.send(resp);
+
+
+
   });
 
 });
+
+function isEquivalent(a, b) {
+    // Create arrays of property names
+    var aProps = Object.getOwnPropertyNames(a);
+    var bProps = Object.getOwnPropertyNames(b);
+
+    // If number of properties is different,
+    // objects are not equivalent
+    if (aProps.length != bProps.length) {
+        return false;
+    }
+
+    for (var i = 0; i < aProps.length; i++) {
+        var propName = aProps[i];
+
+        // If values of same property are not equal,
+        // objects are not equivalent
+        if (a[propName] !== b[propName]) {
+            return false;
+        }
+    }
+
+    // If we made it this far, objects
+    // are considered equivalent
+    return true;
+}
 
 //******************************************************************************
 //
