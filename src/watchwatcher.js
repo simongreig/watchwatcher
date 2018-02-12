@@ -116,6 +116,7 @@ function addToList (list, page, db, testMode, callback) {
           hasBox = String(matchesBox[0]);
         }
 
+        item.source = "watchfinder";
         item.productID = productID;
         item.brand = $(".prods_brand", this).text();
         item.series = $(".prods_series", this).text();
@@ -220,7 +221,112 @@ app.get('/status', function (req, res) {
 
 });
 
+//******************************************************************************
+//
+// This route returns al of the brands in the database with a count
+//
+// Returns: The status string
+//
+//******************************************************************************
+app.get('/brands', function (req, res) {
+  db.getCount("brands", function(err, data) {
+    debug ("Brands: " + err + data);
+    var resp = {} ;
+    if (data) {
+      resp = data.rows;
+    } else {
+      resp = "{'error':'No brands returned'}";
+    }
+    res.send(resp);
+  });
 
+});
+
+//******************************************************************************
+//
+// This route returns all of the series in a brand
+//
+// Returns: The status string
+//
+//******************************************************************************
+app.get('/brand/:brand', function (req, res) {
+  debug ("/brand/%s", req.params.brand);
+  db.getCountWithKey("series", req.params.brand, function(err, data) {
+    if (err) {
+      console.log (err);
+    }
+    debug ("Brands: err:%s, data:%s", JSON.stringify(err), JSON.stringify(data));
+    var resp = {} ;
+    if (data) {
+      resp = data.rows;
+
+      debug(data);
+      for (var i = 0; i < resp.length; i++) {
+        debug ("Brand: %s, Series: %s", resp[i].key[0],resp[i].key[1]);
+//        db.getSeriesImg (resp[i].key[0], resp[i].key[1], function(resp,img) {
+//           resp[i].img = img;
+//        });
+      }
+
+
+
+    } else {
+      resp = "{'error':'No brands returned'}";
+    }
+    res.send(resp);
+  });
+
+});
+
+//******************************************************************************
+//
+// This route returns all of the series in a brand
+//
+// Returns:
+//
+//******************************************************************************
+app.get('/brand/:brand/:series', function (req, res) {
+  debug ("/brand/%s/%s", req.params.brand, req.params.series);
+  db.searchSeries(req.params.brand, req.params.series, function(data) {
+    var resp = {} ;
+    if (data) {
+      resp = data;
+    } else {
+      resp = "{'error':'No watches returned'}";
+    }
+    res.send(resp);
+  });
+});
+
+//******************************************************************************
+//
+// This route returns all of the models in a series
+//
+// Returns:
+//
+//******************************************************************************
+app.get('/series/:brand/:model', function (req, res) {
+  debug ("/series/%s/%s", req.params.brand, req.params.model);
+  db.searchModel(req.params.brand, req.params.model, function(data) {
+    var resp = {} ;
+    if (data) {
+      resp = data;
+    } else {
+      resp = "{'error':'No watches returned'}";
+    }
+    res.send(resp);
+  });
+
+});
+
+
+
+
+//******************************************************************************
+//
+// MAIN
+//
+//******************************************************************************
 
 
 // get the app environment from Cloud Foundry

@@ -19,7 +19,7 @@ Currently testing on Cloudant as eventually when it is run it will run on IBM Cl
 ### Under the covers
 * Screen scrape the website into JSON **[done]**
 * Store the JSON in a database that is persistent (and not duplicated) between runs **[done]**
-* Create a cronjob style schedule to crawl once per day
+* Create a cronjob style schedule to crawl once per day **[done]**
 
 ### User Interface
 

@@ -11,6 +11,30 @@ var dbReadLimiter = new RateLimiter(1, 100);
 
 
 
+/*
+
+
+{
+  "_id": "_design/watches",
+  "_rev": "6-9e5588e941cc39f0ef889322c8dd40f5",
+  "views": {
+    "brands": {
+      "reduce": "_count",
+      "map": "function (doc) {\n    emit(doc.obj.brand, 1);\n}"
+    },
+    "series": {
+      "reduce": "_count",
+      "map": "function (doc) {\n    emit([doc.obj.brand, doc.obj.series], 1);\n}"
+    }
+  },
+  "language": "javascript"
+}
+
+
+*/
+
+
+
 
 // Sort out the database connections and names.
 var cloudant = initDBConnection();
@@ -282,20 +306,44 @@ exports.deleteKeyObj = deleteKeyObj;
 // Search for a specific series
 //
 //******************************************************************************
-var searchSeries = function (key, callback) {
+var searchSeries = function (brand, series, callback) {
 
-  db.find({selector:{'obj.model': key},sort:[{"obj.lastPrice.price:number": "desc"}]}, function(er, result) {
-    console.log (er);
-    if (er) {
-      throw er;
+//  db.find({selector:{'obj.brand': brand, 'obj.series': series},sort:[{"obj.lastPrice.price:number": "desc"}]}, function(err, result) {
+  debug ("searchSeries:  brand:%s, series:%s", brand, series);
+  db.find({selector:{'obj.brand': brand, 'obj.series': series}}, function(err, result) {
+    console.log (err);
+    if (err) {
+      callback (err);
     }
 
-    console.log('Found %d documents with key ' + key, result.docs.length);
+    debug('search: Found %d %s of series %s', result.docs.length, brand, series);
     callback (result.docs);
   });
 
 };
 exports.searchSeries = searchSeries;
+
+//******************************************************************************
+//
+// Search for a specific series
+//
+//******************************************************************************
+var searchModel = function (brand, model, callback) {
+
+//  db.find({selector:{'obj.brand': brand, 'obj.series': series},sort:[{"obj.lastPrice.price:number": "desc"}]}, function(err, result) {
+  debug ("searchModel:  brand:%s, model:%s", brand, model);
+  db.find({selector:{'obj.brand': brand, 'obj.model': model}}, function(err, result) {
+    console.log (err);
+    if (err) {
+      callback (err);
+    }
+
+    debug('search: Found %d %s of model %s', result.docs.length, brand, model);
+    callback (result.docs);
+  });
+
+};
+exports.searchModel = searchModel;
 
 
 //******************************************************************************
@@ -303,7 +351,31 @@ exports.searchSeries = searchSeries;
 // Get a count of all of the brands in the DB
 //
 //******************************************************************************
-var getCount = function (designname, callback) {
-  db.view (designname, 'new-view', {'group': true},callback);
+var getCount = function (view, callback) {
+  db.view ("watches", view, {'group': true},callback);
 }
 exports.getCount = getCount;
+
+//******************************************************************************
+//
+// Get a count of all of the brands in the DB
+//
+//******************************************************************************
+var getCountWithKey = function (view, key, callback) {
+  debug ("getCountWithKey: view:%s, key:%s", view, key);
+  db.view ("watches", view, {startkey:[key],endkey:[key,{}],'group': true},callback);
+}
+exports.getCountWithKey = getCountWithKey;
+
+//******************************************************************************
+//
+// Looks up an example img URL for the requested series.
+//
+//******************************************************************************
+var getSeriesImg = function (brand, series, callback) {
+  debug ("getSeriesImg: brand:%s, series:%s", brand, series);
+  db.find({selector:{'obj.brand': brand, 'obj.series': series},'fields': ['obj.img'], 'limit': 1}, function(err, result) {
+    callback (result);
+  });
+}
+exports.getSeriesImg = getSeriesImg;
