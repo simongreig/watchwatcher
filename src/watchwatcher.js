@@ -33,21 +33,26 @@ var db = require ('./watchwatcher-db');
 
 const baseURL = "http://www.watchfinder.co.uk"
 
-function addToListWithLimiter (list, page, db, testMode, callback) {
+function addToListWithLimiter (count, page, db, testMode, callback) {
   listLimiter.removeTokens(1, function() {
     debug ("addToListWithLimiter fired %s", new Date());
-    addToList (list, page, db, testMode, callback);
+    addToList (count, page, db, testMode, callback);
   });
 }
 
 
-function addToList (list, page, db, testMode, callback) {
+function addToList (count, page, db, testMode, callback) {
 
-  console.log ("Requesting page " + page + " ...")
+  // Force a garbage collection to keep memory usage low.
+  global.gc();
+
+
+  const used = process.memoryUsage().heapUsed / 1024 / 1024;
+  console.log ("Requesting page " + page + " ..." + `(Heap size ${Math.round(used * 100) / 100} MB)`)
   request(baseURL + '/all-watches?&orderby=PriceHighToLow&pageno='+page, function (error, response, html) {
 
     if (response.statusCode != 200) {
-      callback(list);
+      callback(count);
     }
     else {
 
@@ -61,7 +66,7 @@ function addToList (list, page, db, testMode, callback) {
 
       var stuffReturned = false;
 
-
+      // *** MAIN LOOP ***
       $('div.prods_item-card').each(function(i, element){
         stuffReturned = true;
 
@@ -159,34 +164,45 @@ function addToList (list, page, db, testMode, callback) {
           debug ("add:", dbData);
         });
 
-
-        list.push (item);
+        count++;
 
         if (testMode) {
           // Uncomment for testing to only process one row.
           return (false);
         }
 
+        item = null;
+        matches = null;
 
       });
 
       if (stuffReturned) {
         console.log ("Page " + page + " had content");
         if (!testMode) {
-          addToListWithLimiter (list, ++page, db, testMode, printList);
+          $ = null;
+          addToListWithLimiter (count, ++page, db, testMode, printList);
         }
       } else {
         console.log ("No more content on page " + page + "! Stopping.");
       }
-      callback (list);
+      callback (count, page, stuffReturned);
     }
     }
   });
 };
 
-function printList (list) {
-  var results = "Crawl completed:" + new Date() + " " + list.length + " watches watched!";
-  console.log (results);
+function printList (count, page, stuffReturned) {
+  var dt = new Date();
+  var results = "Crawl page completed page " + page + ": " + dt + " " + count + " watches watched!";
+
+  if (stuffReturned) {
+    console.log (results);
+
+
+  } else {
+    console.log ("No more content on page " + page + "! Stopping.");
+  }
+
   db.set ("status", results);
 }
 
@@ -194,8 +210,7 @@ function printList (list) {
 function watchTheWatches (testMode) {
   // Start the main loop.
   debug ("watchTheWatches testmode:%d", testMode);
-  var watchList = [];
-  addToListWithLimiter (watchList, 1, db, testMode, printList);
+  addToListWithLimiter (0, 1, db, testMode, printList);
 }
 
 
@@ -394,6 +409,9 @@ app.get('/series/:brand/:model', function (req, res) {
 //
 //******************************************************************************
 
+// Force a garbage collection validate that --expose-gc option is used.
+global.gc();
+
 
 // get the app environment from Cloud Foundry
 var appEnv = cfenv.getAppEnv();
@@ -403,3 +421,48 @@ app.listen(appEnv.port, '0.0.0.0', function() {
   // print a message when the server starts listening
   console.log("Watch Watcher starting on " + appEnv.url);
 });
+
+
+
+
+
+// TEMP FUNCTION!!!!
+
+function memorySizeOf(obj) {
+    var bytes = 0;
+
+    function sizeOf(obj) {
+        if(obj !== null && obj !== undefined) {
+            switch(typeof obj) {
+            case 'number':
+                bytes += 8;
+                break;
+            case 'string':
+                bytes += obj.length * 2;
+                break;
+            case 'boolean':
+                bytes += 4;
+                break;
+            case 'object':
+                var objClass = Object.prototype.toString.call(obj).slice(8, -1);
+                if(objClass === 'Object' || objClass === 'Array') {
+                    for(var key in obj) {
+                        if(!obj.hasOwnProperty(key)) continue;
+                        sizeOf(obj[key]);
+                    }
+                } else bytes += obj.toString().length * 2;
+                break;
+            }
+        }
+        return bytes;
+    };
+
+    function formatByteSize(bytes) {
+        if(bytes < 1024) return bytes + " bytes";
+        else if(bytes < 1048576) return(bytes / 1024).toFixed(3) + " KiB";
+        else if(bytes < 1073741824) return(bytes / 1048576).toFixed(3) + " MiB";
+        else return(bytes / 1073741824).toFixed(3) + " GiB";
+    };
+
+    return formatByteSize(sizeOf(obj));
+};
